@@ -63,11 +63,11 @@ try:
                     processo_registrazione.terminate()
 
                 registrando = False
-                
+
                 # Ferma il thread del LED e spegnilo
                 stop_led_thread = True
                 GPIO.output(LED_PIN, GPIO.LOW)
-                
+
                 print("Registrazione salvata.")
 
             time.sleep(1) # Debounce
@@ -82,6 +82,7 @@ except KeyboardInterrupt:
         subprocess.run("pkill -P " + str(processo_registrazione.pid), shell=True)
         processo_registrazione.terminate()
     
+
     # Pulizia finale hardware
     GPIO.output(LED_PIN, GPIO.LOW)
     GPIO.cleanup()
