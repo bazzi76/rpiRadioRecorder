@@ -1,0 +1,14 @@
+[Unit]
+Description=Interfaccia Web per rpiRadioRecorder
+After=network.target
+
+[Service]
+Type=simple
+User=gmattei
+WorkingDirectory=/home/gmattei/rpiRadioRecorder
+ExecStart=/usr/bin/python3 /home/gmattei/rpiRadioRecorder/web_server.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

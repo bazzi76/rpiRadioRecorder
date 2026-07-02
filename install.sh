@@ -25,7 +25,7 @@ echo "-> Cartella di lavoro impostata su: $REPO_DIR"
 # 3. Aggiorna i pacchetti e installa le dipendenze di sistema
 echo "-> Installazione delle dipendenze di sistema (ALSA, Lame, Python)..."
 apt update
-apt install -y alsa-utils lame python3 python3-pip python3-rpi.gpio
+apt install -y alsa-utils lame python3 python3-pip python3-rpi.gpio python3-flask
 
 # 4. Crea la cartella per le registrazioni (se non esiste già)
 echo "-> Creazione della cartella dei salvataggi..."
@@ -46,6 +46,13 @@ echo "-> Abilitazione e avvio del servizio..."
 systemctl daemon-reload
 systemctl enable radiorecorder.service
 systemctl restart radiorecorder.service
+
+# 8. Abilita web-service
+cp "$REPO_DIR/radiorecorder-web.service" /etc/systemd/system/radiorecorder-web.service
+
+systemctl daemon-reload
+systemctl enable radiorecorder-web.service 
+systemctl restart radiorecorder-web.service
 
 echo "===================================================="
 echo "  Installazione completata con successo!            "
