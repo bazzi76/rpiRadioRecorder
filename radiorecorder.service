@@ -1,0 +1,19 @@
+[Unit]
+Description=Servizio Registratore Radio con Pulsante GPIO
+After=sound.target network.target
+
+[Service]
+Type=simple
+User=gmattei
+# Specifichiamo la cartella di lavoro così i file MP3 verranno salvati lì
+WorkingDirectory=/home/gmattei/rpiRadioRecorder
+ExecStart=/usr/bin/python3 /usr/bin/rpi_recorder
+Restart=on-failure
+RestartSec=5
+
+# Assicura che al comando 'stop' systemd termini pulitamente sia lo script che i subprocessi
+KillMode=mixed
+
+[Install]
+WantedBy=multi-user.target
+
