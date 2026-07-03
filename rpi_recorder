@@ -3,20 +3,23 @@ import time
 import subprocess
 import threading
 import sys
-import signal # <--- Importante per gestire systemd
+import signal
+import os # <--- Serve per lanciare il comando vocale
 
 # Configurazione PIN
 BUTTON_PIN = 23
 LED_PIN = 24
+BUTTON_IP_PIN = 17 # <--- Nuovo pulsante per l'IP
 
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(BUTTON_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+GPIO.setup(BUTTON_IP_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP) # <--- Configurato con pull-up
 GPIO.setup(LED_PIN, GPIO.OUT)
 GPIO.output(LED_PIN, GPIO.LOW)
 
 print("Attivazione dello speaker di monitor...")
-cmd_monitor = "alsaloop -C plug:dsnoop:0 -P plughw:0,0 -c 1 -t 80000"
-processo_monitor = subprocess.Popen(cmd_monitor, shell=True)
+cmd_monitor = ["alsaloop", "-C", "plug:dsnoop:0", "-P", "plughw:0,0", "-c", "1", "-t", "80000"]
+processo_monitor = subprocess.Popen(cmd_monitor)
 
 registrando = False
 processo_registrazione = None
@@ -30,13 +33,44 @@ def lampeggia_led():
         GPIO.output(LED_PIN, GPIO.LOW)
         time.sleep(0.5)
 
-# FUNZIONE DI CHIUSURA PULITA (Valida sia per Ctrl+C che per Systemd)
+# FUNZIONE PER LEGGERE L'IP A VOCE
+def pronuncia_ip():
+    global processo_monitor
+    print("Recupero indirizzo IP...")
+    
+    # 1. Recupera l'IP
+    cmd_get_ip = "hostname -I | awk '{print $1}'"
+    ip = subprocess.check_output(cmd_get_ip, shell=True).decode('utf-8').strip()
+    testo = f"Il mio indirizzo i pi è {ip}" if ip else "Nessuna connessione di rete"
+    
+    # 2. Genera il file WAV
+    print(f"Dico a voce: {testo}")
+    subprocess.run(f"espeak-ng -v it -s 140 '{testo}' -w /tmp/ip.wav", shell=True)
+    
+    # 3. Killa RECONOSCIUTAMENTE alsaloop liberando ALSA
+    if processo_monitor:
+        print("Spegnimento temporaneo del monitor...")
+        # Chiudiamo sia la shell (se rimasta) che il processo direttamente
+        subprocess.run(f"pkill -P {processo_monitor.pid}", shell=True)
+        processo_monitor.terminate()
+        processo_monitor.wait() # Forza l'attesa del rilascio hardware
+        time.sleep(0.5) # Un piccolo respiro per ALSA
+    
+    # 4. Riproduci l'IP a scheda audio totalmente scarica
+    subprocess.run("aplay -D plughw:0,0 /tmp/ip.wav", shell=True)
+    subprocess.run("rm -f /tmp/ip.wav", shell=True)
+    
+    # 5. Ripristina il monitor della radio
+    print("Ripristino dello speaker di monitor...")
+    cmd_monitor = ["alsaloop", "-C", "plug:dsnoop:0", "-P", "plughw:0,0", "-c", "1", "-t", "80000"]
+    processo_monitor = subprocess.Popen(cmd_monitor)
+
+# FUNZIONE DI CHIUSURA PULITA
 def chiusura_pulita(signum, frame):
-    print("\nChiusura pulita ricevuta (Segnale {})...".format(signum))
+    print("\nChiusura pulita ricevuta...")
     global stop_led_thread, processo_monitor, processo_registrazione
     
     stop_led_thread = True
-    
     if processo_monitor:
         processo_monitor.terminate()
     if processo_registrazione:
@@ -47,17 +81,27 @@ def chiusura_pulita(signum, frame):
     GPIO.cleanup()
     sys.exit(0)
 
-# Colleghiamo i segnali alla nostra funzione di chiusura
-signal.signal(signal.SIGINT, chiusura_pulita)  # Gestisce Ctrl+C
-signal.signal(signal.SIGTERM, chiusura_pulita) # Gestisce il comando "systemctl stop"
+signal.signal(signal.SIGINT, chiusura_pulita)
+signal.signal(signal.SIGTERM, chiusura_pulita)
 
-print("Sistema pronto. Premi il pulsante per avviare/fermare.")
+print("Sistema pronto. Pulsante 23: Rec | Pulsante 17: Dici IP")
 
 try:
     while True:
-        stato_pulsante = GPIO.input(BUTTON_PIN)
+        stato_pulsante_rec = GPIO.input(BUTTON_PIN)
+        stato_pulsante_ip = GPIO.input(BUTTON_IP_PIN) # <--- Legge il nuovo pulsante
 
-        if stato_pulsante == False:
+	# GESTIONE PULSANTE IP (Ottimizzata)
+        if stato_pulsante_ip == False:
+            # Controlla se il thread IP è già attivo per evitare doppie letture
+            # Cerca se esiste già un thread chiamato "IP_Thread"
+            if not any(t.name == "IP_Thread" for t in threading.enumerate()):
+                ip_thread = threading.Thread(target=pronuncia_ip, name="IP_Thread")
+                ip_thread.start()
+            time.sleep(1.5) # Debounce più lungo per dare tempo al dito di staccarsi
+
+        # GESTIONE PULSANTE REGISTRAZIONE
+        if stato_pulsante_rec == False:
             if not registrando:
                 print("--- Avvio Registrazione ---")
                 nome_file = time.strftime("/home/gmattei/rpiRadioRecorder/recordings/radio_%Y%m%d_%H%M%S.mp3")
@@ -71,7 +115,6 @@ try:
                 led_thread = threading.Thread(target=lampeggia_led)
                 led_thread.daemon = True
                 led_thread.start()
-
             else:
                 print("--- Arresto Registrazione ---")
                 if processo_registrazione:

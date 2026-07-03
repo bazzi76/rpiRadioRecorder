@@ -25,7 +25,7 @@ echo "-> Cartella di lavoro impostata su: $REPO_DIR"
 # 3. Aggiorna i pacchetti e installa le dipendenze di sistema
 echo "-> Installazione delle dipendenze di sistema (ALSA, Lame, Python)..."
 apt update
-apt install -y alsa-utils lame python3 python3-pip python3-rpi.gpio python3-flask
+apt install -y alsa-utils lame python3 python3-pip python3-rpi.gpio python3-flask espeak-ng
 
 # 4. Crea la cartella per le registrazioni (se non esiste già)
 echo "-> Creazione della cartella dei salvataggi..."
