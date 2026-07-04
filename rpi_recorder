@@ -120,11 +120,40 @@ try:
                 if processo_registrazione:
                     subprocess.run("pkill -P " + str(processo_registrazione.pid), shell=True)
                     processo_registrazione.terminate()
+                    processo_registrazione.wait() # Aspetta che il file MP3 venga chiuso del tutto
 
                 registrando = False
                 stop_led_thread = True
                 GPIO.output(LED_PIN, GPIO.LOW)
-                print("Registrazione salvata.")
+                print("Registrazione interrotta. Avvio elaborazione audio con SoX...")
+
+                # FUNZIONE PER L'ELABORAZIONE IN UN THREAD SEPARATO
+                # Usiamo un thread così il led smette di lampeggiare subito e l'interfaccia non si blocca
+                def elabora_audio(file_grezzo):
+                    file_temporaneo = file_grezzo.replace(".mp3", "_temp.mp3")
+                    
+                    # Il tuo comando SoX personalizzato
+                    comando_sox = (
+                        f"sox '{file_grezzo}' '{file_temporaneo}' "
+                        f"silence -l 1 0.3 1% -1 0.5 1% "
+                        f"highpass 300 lowpass 3400 "
+                        f"compand 0.3,1 -90,-90,-70,-70,-60,-20,0,0 -5"
+                    )
+                    
+                    try:
+                        # Esegue il filtraggio
+                        subprocess.run(comando_sox, shell=True, check=True)
+                        # Sovrascrive il file originale con quello pulito
+                        os.replace(file_temporaneo, file_grezzo)
+                        print(f"Elaborazione completata con successo per: {file_grezzo}")
+                    except subprocess.CalledProcessError as e:
+                        print(f"Errore durante l'elaborazione SoX: {e}")
+                        # In caso di errore, rimuove il temporaneo se esiste per non sporcare la cartella
+                        if os.path.exists(file_temporaneo):
+                            os.remove(file_temporaneo)
+
+                # Avvia l'elaborazione SoX in background
+                threading.Thread(target=elabora_audio, args=(nome_file,)).start()
 
             time.sleep(1) # Debounce
 
